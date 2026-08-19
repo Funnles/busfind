@@ -28,6 +28,32 @@ python3 server.py
 Прямая ссылка на маршрут: `http://localhost:8000/r?f=ZOB&t=Bahnhof`
 (можно передавать и id остановок: `f=3020200&t=3020010`).
 
+## Запуск в Docker
+
+```
+git clone https://github.com/Funnles/busfind.git
+cd busfind
+docker compose up --build
+```
+
+Открой `http://localhost:8000/` (на сервере — `http://<ip-сервера>:8000/`).
+Остановить: `Ctrl+C`. Убрать контейнер: `docker compose down`.
+
+Ошибка `no configuration file provided: not found` значит, что в текущем
+каталоге нет `docker-compose.yml` — перейди в папку, куда склонирован
+репозиторий (`cd ~/busfind`), и повтори команду.
+
+Без compose, голым docker:
+
+```
+docker build -t busfind .
+docker run -d --name busfind -p 8000:8000 --restart unless-stopped busfind
+```
+
+Контейнер работает read-only и от непривилегированного пользователя.
+Офлайн-демо внутри контейнера: раскомментируй `BUSFIND_OFFLINE: "1"`
+в `docker-compose.yml`.
+
 ## Как это устроено
 
 Данные берутся из официального EFA-интерфейса VGN (`efa.vgn.de`):
