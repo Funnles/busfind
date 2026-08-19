@@ -8,7 +8,8 @@ RUN useradd --system --uid 10001 --home /app --shell /usr/sbin/nologin busfind
 
 WORKDIR /app
 
-COPY server.py ./
+COPY server.py test_server.py ./
+COPY scripts/ ./scripts/
 COPY fixtures/ ./fixtures/
 
 USER 10001:10001
