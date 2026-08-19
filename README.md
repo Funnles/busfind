@@ -35,6 +35,32 @@ Direkter Link:
 
 Sprache umschalten: Links oben auf jeder Seite, oder `?lang=en|uk|ru`.
 
+## Start mit Docker
+
+```
+git clone https://github.com/Funnles/busfind.git
+cd busfind
+docker compose up --build
+```
+
+Öffne `http://localhost:8000/` (auf einem Server: `http://<server-ip>:8000/`).
+Stoppen: `Strg+C`. Container entfernen: `docker compose down`.
+
+Der Fehler `no configuration file provided: not found` bedeutet, dass im
+aktuellen Verzeichnis keine `docker-compose.yml` liegt — wechsle in den
+Ordner, in den das Repository geklont wurde (`cd ~/busfind`), und
+wiederhole den Befehl.
+
+Ohne Compose, direkt mit Docker:
+
+```
+docker build -t busfind .
+docker run -d --name busfind -p 8000:8000 --restart unless-stopped busfind
+```
+
+Der Container läuft read-only als unprivilegierter Nutzer. Offline-Demo im
+Container: `BUSFIND_OFFLINE: "1"` in `docker-compose.yml` einkommentieren.
+
 ## Technik
 
 Verbindungen kommen von der offiziellen EFA-Schnittstelle VGN (`efa.vgn.de`):
