@@ -244,6 +244,82 @@ class PageTests(unittest.TestCase):
         self.assertIn("без пересадок", html)
 
 
+class FooterAndDayTests(unittest.TestCase):
+    def test_footer_no_frogfind(self):
+        for lang, expected in [
+            ("de", "busfind · Daten: efa.vgn.de"),
+            ("en", "busfind · data: efa.vgn.de"),
+            ("uk", "busfind · дані: efa.vgn.de"),
+            ("ru", "busfind · данные: efa.vgn.de"),
+        ]:
+            foot = server.foot(lang)
+            self.assertIn(expected, foot)
+            self.assertNotIn("frogfind", foot)
+
+    def test_day_prefix_morgen(self):
+        req = datetime(2026, 8, 18)
+        self.assertEqual(server.format_day_prefix("19.08.2026", req, "de"), "morgen ")
+        self.assertEqual(server.format_day_prefix("19.08.2026", req, "en"), "tomorrow ")
+        self.assertEqual(server.format_day_prefix("19.08.2026", req, "uk"), "завтра ")
+        self.assertEqual(server.format_day_prefix("19.08.2026", req, "ru"), "завтра ")
+
+    def test_day_prefix_same_day(self):
+        req = datetime(2026, 8, 19)
+        self.assertEqual(server.format_day_prefix("19.08.2026", req, "de"), "")
+
+    def test_day_prefix_future_date(self):
+        req = datetime(2026, 8, 17)  # Monday
+        # 19.08.2026 is Wednesday (Mi in German)
+        self.assertEqual(server.format_day_prefix("19.08.2026", req, "de"), "Mi 19.08. ")
+
+
+class TripOrderTests(unittest.TestCase):
+    def _make_trip(self, time_str, date_str="19.08.2026"):
+        return {
+            "date": date_str,
+            "legs": [{
+                "dep": ("17:00", time_str, date_str),
+                "arr": ("17:10", "17:10", date_str),
+            }]
+        }
+
+    def test_order_trips_one_before_when(self):
+        trips = [
+            self._make_trip("17:00"),
+            self._make_trip("17:15"),
+            self._make_trip("17:45"),
+            self._make_trip("18:00"),
+        ]
+        when = datetime(2026, 8, 19, 17, 30)
+        ordered = server.order_trips(trips, when)
+        dep_times = [t["legs"][0]["dep"][1] for t in ordered]
+        self.assertEqual(dep_times, ["17:15", "17:45", "18:00"])
+
+    def test_order_trips_all_after(self):
+        trips = [self._make_trip("17:35"), self._make_trip("18:00")]
+        when = datetime(2026, 8, 19, 17, 30)
+        ordered = server.order_trips(trips, when)
+        self.assertEqual(len(ordered), 2)
+
+    def test_order_trips_all_before(self):
+        trips = [self._make_trip("17:00"), self._make_trip("17:15")]
+        when = datetime(2026, 8, 19, 17, 30)
+        ordered = server.order_trips(trips, when)
+        dep_times = [t["legs"][0]["dep"][1] for t in ordered]
+        self.assertEqual(dep_times, ["17:15"])
+
+    def test_order_trips_none_when(self):
+        trips = [self._make_trip("17:00"), self._make_trip("17:15")]
+        ordered = server.order_trips(trips, None)
+        self.assertEqual(len(ordered), 2)
+
+
+class CssAndLayoutTests(unittest.TestCase):
+    def test_responsive_css_media_query(self):
+        self.assertIn("@media(max-width:600px)", server.CSS)
+        self.assertIn("flex-direction:column", server.CSS)
+
+
 class HttpTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -303,6 +379,16 @@ class HttpTests(unittest.TestCase):
         code, body, _ = self.get("/r?f=ZOB&lang=en")
         self.assertEqual(code, 200)
         self.assertIn("Please fill in both fields.", body)
+
+    def test_route_yesterday_shows_morgen(self):
+        qs = urllib.parse.urlencode({
+            "f": "Bamberg, ZOB", "t": "Konzerthalle",
+            "d": "2026-08-18", "tm": "17:30", "lang": "de",
+        })
+        code, body, _ = self.get("/r?" + qs)
+        self.assertEqual(code, 200)
+        self.assertIn("morgen", body)
+        self.assertIn("17:15→17:21", body)
 
 
 if __name__ == "__main__":

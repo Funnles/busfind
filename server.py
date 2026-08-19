@@ -185,10 +185,16 @@ _T = {
     "plan": ("(Plan %s)", "(sched. %s)", "(план %s)", "(план %s)"),
     "departure": ("Abfahrt", "Departure", "Відправлення", "Отправление"),
     "footer": (
-        "Daten: efa.vgn.de · Idee: frogfind.com",
-        "data: efa.vgn.de · idea: frogfind.com",
-        "дані: efa.vgn.de · ідея: frogfind.com",
-        "данные: efa.vgn.de · идея: frogfind.com",
+        "Daten: efa.vgn.de",
+        "data: efa.vgn.de",
+        "дані: efa.vgn.de",
+        "данные: efa.vgn.de",
+    ),
+    "tomorrow": (
+        "morgen",
+        "tomorrow",
+        "завтра",
+        "завтра",
     ),
     "title_error": (
         "busfind — Fehler",
@@ -723,6 +729,77 @@ def efa_stop_ref(sid, name=""):
     return (name or sid).strip()
 
 
+def get_trip_dep_dt(trip):
+    if not trip.get("legs"):
+        return datetime.min
+    leg = trip["legs"][0]
+    dt_str = leg["dep"][1] or leg["dep"][0] or ""
+    d_str = trip.get("date") or leg["dep"][2] or ""
+    try:
+        return datetime.strptime("%s %s" % (d_str, dt_str), "%d.%m.%Y %H:%M")
+    except (ValueError, TypeError):
+        return datetime.min
+
+
+def order_trips(trips, when=None):
+    """
+    Sortiert Fahrten chronologisch und behält höchstens EINE (die späteste)
+    Fahrt vor dem angeforderten Zeitpunkt `when`. Alle späteren bleiben.
+    """
+    if not trips or not when or not isinstance(when, datetime):
+        return trips
+
+    sorted_trips = sorted(trips, key=get_trip_dep_dt)
+    before = []
+    after = []
+    for t in sorted_trips:
+        dep_dt = get_trip_dep_dt(t)
+        if dep_dt < when:
+            before.append(t)
+        else:
+            after.append(t)
+
+    result = []
+    if before:
+        result.append(before[-1])
+    result.extend(after)
+    return result
+
+
+def format_day_prefix(trip_date_str, req_date, lang="de"):
+    if not trip_date_str or not req_date:
+        return ""
+
+    if isinstance(req_date, datetime):
+        r_dt = req_date.date()
+    elif hasattr(req_date, "year") and hasattr(req_date, "month") and hasattr(req_date, "day"):
+        r_dt = req_date
+    else:
+        r_dt = None
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y"):
+            try:
+                r_dt = datetime.strptime(str(req_date).strip(), fmt).date()
+                break
+            except ValueError:
+                pass
+        if not r_dt:
+            return ""
+
+    try:
+        t_dt = datetime.strptime(str(trip_date_str).strip(), "%d.%m.%Y").date()
+    except (ValueError, TypeError):
+        return ""
+
+    delta = (t_dt - r_dt).days
+    if delta == 0:
+        return ""
+    if delta == 1:
+        return tr(lang, "tomorrow") + " "
+
+    wd = WEEKDAYS.get(lang, WEEKDAYS["de"])[t_dt.weekday()]
+    return "%s %s " % (wd, t_dt.strftime("%d.%m."))
+
+
 def get_trips(o_id, d_id, demo=False, when=None, lang="de",
               o_name="", d_name=""):
     """-> (trips, Name_von, Name_nach)"""
@@ -743,7 +820,10 @@ def get_trips(o_id, d_id, demo=False, when=None, lang="de",
             "type_destination": "stop", "name_destination": efa_stop_ref(d_id, d_name),
         })
     o_name, d_name = endpoint_names(data)
-    return parse_trips(data, lang), o_name, d_name
+    trips = parse_trips(data, lang)
+    if when:
+        trips = order_trips(trips, when)
+    return trips, o_name, d_name
 
 
 # --------------------------------------------------------------------------
@@ -756,6 +836,8 @@ CSS = (
     "button{font:inherit;padding:.3em 1em}pre{white-space:pre-wrap;background:#f4f4f4;"
     "padding:.4em .6em;margin:.2em 0}.t{margin:1.2em 0}.e{color:#b00}small{color:#666}"
     ".r{display:flex;gap:.6em}.r>p{flex:1;margin:.4em 0}.lang a{white-space:nowrap}"
+    "@media(max-width:600px){body{max-width:100%;margin:.5em 0;padding:0 .8em}"
+    "input,button{font-size:1.1em;padding:.4em}.r{flex-direction:column;gap:0}}"
 )
 
 HINT_JS = (
@@ -880,12 +962,13 @@ def page_choices(which, query, stops, f="", t="", d="", tm="", lang="de"):
     return "".join(parts)
 
 
-def render_trip(trip, lang="de"):
+def render_trip(trip, lang="de", req_date=None):
     """eine Verbindungsvariante"""
     head_bits = []
     if trip["legs"]:
-        head_bits.append("<b>%s→%s</b>" % (
-            h(trip["legs"][0]["dep"][1]), h(trip["legs"][-1]["arr"][1])))
+        pfx = format_day_prefix(trip.get("date"), req_date, lang)
+        head_bits.append("<b>%s%s→%s</b>" % (
+            pfx, h(trip["legs"][0]["dep"][1]), h(trip["legs"][-1]["arr"][1])))
     if trip["walk_only"]:
         bits = [tr(lang, "walk")]
         if trip.get("walk_m") is not None:
@@ -960,7 +1043,7 @@ def page_route(f_id, f_name, t_id, t_name, trips, o_name, d_name,
     if not trips:
         parts.append('<p class=e>%s</p>' % tr(lang, "no_route"))
     for trip in trips:
-        parts.append(render_trip(trip, lang))
+        parts.append(render_trip(trip, lang, req_date=when or d))
     parts.append(foot(lang))
     return "".join(parts)
 
