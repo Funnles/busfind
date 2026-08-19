@@ -13,5 +13,22 @@
   {"id": "3020020", "name": "Bamberg, Am Kranen", "object": "Am Kranen", "place": "Bamberg", "quality": 1000, "best": 1},
   {"id": "3020202", "name": "Bamberg, Lange Str.", "object": "Lange Str.", "place": "Bamberg", "quality": 1000, "best": 1},
   {"id": "3020087", "name": "Bamberg, Gaustadt Ziegelei", "object": "Gaustadt Ziegelei", "place": "Bamberg", "quality": 1000, "best": 1},
-  {"id": "3020900", "name": "Hallstadt (b Bamberg), Bahnhof", "object": "Bahnhof", "place": "Hallstadt (b Bamberg)", "quality": 460}
+  {"id": "3020900", "name": "Hallstadt (b Bamberg), Bahnhof", "object": "Bahnhof", "place": "Hallstadt (b Bamberg)", "quality": 460},
+  {"id": "3050200", "name": "Forchheim, ZOB", "object": "ZOB", "place": "Forchheim", "quality": 980, "best": 1},
+  {"id": "3050010", "name": "Forchheim, Bahnhof", "object": "Bahnhof", "place": "Forchheim", "quality": 970},
+  {"id": "3010200", "name": "Erlangen, ZOB", "object": "ZOB", "place": "Erlangen", "quality": 970, "best": 1},
+  {"id": "3010010", "name": "Erlangen, Bahnhof", "object": "Bahnhof", "place": "Erlangen", "quality": 960},
+  {"id": "3000200", "name": "Nürnberg, ZOB", "object": "ZOB", "place": "Nürnberg", "quality": 950, "best": 1},
+  {"id": "3000010", "name": "Nürnberg, Hauptbahnhof", "object": "Hauptbahnhof", "place": "Nürnberg", "quality": 990},
+  {"id": "3060200", "name": "Herzogenaurach, ZOB", "object": "ZOB", "place": "Herzogenaurach", "quality": 900},
+  {"id": "3070200", "name": "Höchstadt (Aisch), ZOB", "object": "ZOB", "place": "Höchstadt (Aisch)", "quality": 880},
+  {"id": "3080200", "name": "Scheßlitz, ZOB", "object": "ZOB", "place": "Scheßlitz", "quality": 860},
+  {"id": "3020301", "name": "Bamberg, Schönleinsplatz", "object": "Schönleinsplatz", "place": "Bamberg", "quality": 940},
+  {"id": "3020302", "name": "Bamberg, Klinikum", "object": "Klinikum", "place": "Bamberg", "quality": 930},
+  {"id": "3020303", "name": "Bamberg, Universität", "object": "Universität", "place": "Bamberg", "quality": 920},
+  {"id": "3020304", "name": "Bamberg, Gabelmann", "object": "Gabelmann", "place": "Bamberg", "quality": 910},
+  {"id": "3020305", "name": "Bamberg, Schillerplatz", "object": "Schillerplatz", "place": "Bamberg", "quality": 900},
+  {"id": "3020306", "name": "Bamberg, Heinrichsdamm", "object": "Heinrichsdamm", "place": "Bamberg", "quality": 890},
+  {"id": "3040010", "name": "Hirschaid, Bahnhof", "object": "Bahnhof", "place": "Hirschaid", "quality": 700},
+  {"id": "3030010", "name": "Strullendorf, Bahnhof", "object": "Bahnhof", "place": "Strullendorf", "quality": 680}
 ]

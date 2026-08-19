@@ -1,61 +1,73 @@
 # busfind 🚌
 
-**frogfind для автобусов Бамберга.**
+**frogfind für Busse in Bamberg.**
 
-Твой телеком режет скорость до уровня dial-up? vgn.de весит мегабайты и не
-грузится? busfind — как [frogfind.com](https://frogfind.com), только для
-маршрутов VGN: сервер делает всю работу, а тебе на телефон прилетает голый
-HTML на **1–3 КБ**. Без джаваскрипта, без картинок, без CSS-фреймворков.
-На 64 кбит/с страница открывается меньше чем за секунду.
+Dein Netz drosselt auf Dial-up? vgn.de wiegt Megabyte und lädt nicht?
+busfind ist wie [frogfind.com](https://frogfind.com), nur für VGN-Verbindungen:
+der Server macht die Arbeit, aufs Telefon kommt nacktes HTML von **1–3 KB**.
+Keine Frameworks, keine Bilder. Auf 64 kbit/s ist die Seite in unter einer
+Sekunde da.
 
 ```
-главная   ~0.9 КБ
-маршрут   ~1.6 КБ   (3 варианта, остановки, платформы, цена билета)
-ошибка    ~0.9 КБ
+Startseite   ~2 KB   (Formular, Datum/Uhrzeit, Sprachwahl, Haltestellen-Hinweise)
+Verbindung   ~1.6 KB (3 Varianten, Steige, Ticketpreis)
+Fehler       ~1 KB
 ```
 
-## Как пользоваться
+Sprachen: **Deutsch** (Standard), English, Українська, Русский.
+
+## Benutzung
 
 ```
 python3 server.py
 ```
 
-Открой `http://localhost:8000/`. Два поля («Откуда», «Куда»), одна кнопка.
-Пиши остановку как есть: `ZOB`, `Bahnhof`, `Konzerthalle`, `Markusplatz`,
-`Hallstadt Bahnhof`… Если название неоднозначное — busfind покажет список
-на выбор. Если остановки нет в VGN — честная ошибка «не найдено в VGN».
+Öffne `http://localhost:8000/`. Felder «Von» / «Nach», **Datum und Uhrzeit
+der Abfahrt**, eine Taste. Beim Tippen erscheinen Vorschläge
+(`ZOB` → Bamberg ZOB, Forchheim ZOB, Erlangen ZOB …). Ohne JavaScript
+greift die HTML-Datalist, und bei mehrdeutigen Namen kommt eine Klärungsseite.
 
-Прямая ссылка на маршрут: `http://localhost:8000/r?f=ZOB&t=Bahnhof`
-(можно передавать и id остановок: `f=3020200&t=3020010`).
+Direkter Link:
+`http://localhost:8000/r?f=ZOB&t=Bahnhof&d=2026-08-19&tm=17:30&lang=de`
+(auch Halt-IDs: `f=3020200&t=3020010`).
 
-## Как это устроено
+Sprache umschalten: Links oben auf jeder Seite, oder `?lang=en|uk|ru`.
 
-Данные берутся из официального EFA-интерфейса VGN (`efa.vgn.de`):
+## Technik
 
-* `XML_STOPFINDER_REQUEST` — поиск остановки по имени;
-* `XML_TRIP_REQUEST2` — маршруты «откуда → куда».
+Daten kommen von der offiziellen EFA-Schnittstelle VGN (`efa.vgn.de`):
 
-EFA отвечает JSON-ём на десятки килобайт (координаты, тарифы, повороты
-пешеходных маршрутов…). busfind вытаскивает из него суть — времена,
-платформы, номера линий, пересадки, цену билета, задержки realtime —
-и рендерит это в минимальный HTML. Ноль зависимостей, чистый stdlib Python.
+* `XML_STOPFINDER_REQUEST` — Haltestelle nach Namen
+* `XML_TRIP_REQUEST2` — Verbindungen «von → nach» zur gewählten Abfahrtszeit
 
-Вдохновлено:
+EFA liefert Dutzende Kilobyte JSON. busfind zieht Zeiten, Steige, Linien,
+Umstiege, Ticketpreis und Echtzeit-Verspätung raus und rendert minimales HTML.
+Keine Abhängigkeiten, reines Python-stdlib.
 
-* <https://github.com/ActionRetro/FrogFind> — сама идея «интернет для медленного канала»
+Ein paar hundert Byte JS füllen die Vorschläge nach (`GET /s?q=ZOB` → JSON).
+Ohne JS bleibt alles benutzbar.
+
+Inspiriert von:
+
+* <https://github.com/ActionRetro/FrogFind> — Internet für langsame Leitungen
 * <https://github.com/becheran/vgn> — API Verkehrsverbund Großraum Nürnberg
 
-## Настройки (переменные окружения)
+## Umgebungsvariablen
 
-| переменная        | по умолчанию              | что делает                             |
-|-------------------|---------------------------|----------------------------------------|
-| `BUSFIND_PORT`    | `8000`                    | порт сервера                           |
-| `EFA_URL`         | `https://efa.vgn.de/xml/` | адрес EFA (можно зеркалом)             |
-| `BUSFIND_TIMEOUT` | `12`                      | таймаут запросов к EFA, сек            |
-| `BUSFIND_OFFLINE` | выкл                      | `1` — демо на локальном снимке данных  |
+| Variable          | Standard                  | Bedeutung                             |
+|-------------------|---------------------------|---------------------------------------|
+| `BUSFIND_PORT`    | `8000`                    | Server-Port                           |
+| `EFA_URL`         | `https://efa.vgn.de/xml/` | EFA-Adresse (oder Spiegel)            |
+| `BUSFIND_TIMEOUT` | `12`                      | Timeout der EFA-Anfragen, Sekunden    |
+| `BUSFIND_OFFLINE` | aus                       | `1` — Demo mit lokalem Snapshot       |
 
-## Офлайн-демо
+## Offline-Demo
 
-В `fixtures/` лежит снимок реальных ответов EFA от 19.08.2026
-(маршрут ZOB → Konzerthalle на автобусе 906). Если `efa.vgn.de` недоступен,
-busfind автоматически показывает демо со снимком — удобно для отладки.
+In `fixtures/` liegt ein EFA-Schnappschuss vom 19.08.2026
+(Verbindung ZOB → Konzerthalle, Bus 906) plus eine erweiterte
+Haltestellenliste für die Vorschläge. Ist `efa.vgn.de` nicht erreichbar,
+zeigt busfind automatisch die Demo.
+
+```
+python3 test_server.py
+```
