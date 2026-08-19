@@ -1,0 +1,55 @@
+{
+  "origin": {"points": {"point": {"name": "Bamberg, ZOB", "ref": {"id": "3020200"}}}},
+  "destination": {"points": {"point": {"name": "Bamberg, Konzerthalle", "ref": {"id": "3020178"}}}},
+  "dateTime": {"deparr": "dep", "date": "19.08.2026", "time": "17:30"},
+  "trips": [
+    {
+      "distance": "0", "duration": "00:06", "interchange": "0", "desc": "1",
+      "legs": [
+        {
+          "timeMinute": "6",
+          "points": [
+            {"name": "Bamberg ZOB", "platformName": "Bstg. G", "usage": "departure",
+             "dateTime": {"date": "19.08.2026", "time": "17:15", "rtDate": "19.08.2026", "rtTime": "17:15"}},
+            {"name": "Bamberg Konzerthalle", "usage": "arrival",
+             "dateTime": {"date": "19.08.2026", "time": "17:21", "rtDate": "19.08.2026", "rtTime": "17:21"}}
+          ],
+          "mode": {"product": "Stadtbus", "number": "906", "symbol": "906", "destination": "Trosdorf Industriegebiet"}
+        }
+      ],
+      "itdFare": {"fares": {"fare": {"fareAdult": "2.60", "fareChild": "1.30", "unitsAdult": "D", "currency": "EUR"}}}
+    },
+    {
+      "distance": "0", "duration": "00:06", "interchange": "0", "desc": "2",
+      "legs": [
+        {
+          "timeMinute": "6",
+          "points": [
+            {"name": "Bamberg ZOB", "platformName": "Bstg. G", "usage": "departure",
+             "dateTime": {"date": "19.08.2026", "time": "17:30", "rtDate": "19.08.2026", "rtTime": "17:32"}},
+            {"name": "Bamberg Konzerthalle", "usage": "arrival",
+             "dateTime": {"date": "19.08.2026", "time": "17:36", "rtDate": "19.08.2026", "rtTime": "17:38"}}
+          ],
+          "mode": {"product": "Stadtbus", "number": "906", "symbol": "906", "destination": "Gaustadt Ziegelei"}
+        }
+      ],
+      "itdFare": {"fares": {"fare": {"fareAdult": "2.60", "fareChild": "1.30", "unitsAdult": "D", "currency": "EUR"}}}
+    },
+    {
+      "distance": "1038", "duration": "00:15", "individualDuration": "00:15", "interchange": "0", "desc": "-1",
+      "legs": [
+        {
+          "timeMinute": "15", "distance": "1038",
+          "points": [
+            {"name": "Bamberg ZOB", "usage": "departure",
+             "dateTime": {"date": "19.08.2026", "time": "17:30", "rtDate": "19.08.2026", "rtTime": "17:30"}},
+            {"name": "Bamberg Konzerthalle", "usage": "arrival",
+             "dateTime": {"date": "19.08.2026", "time": "17:45", "rtDate": "19.08.2026", "rtTime": "17:45"}}
+          ],
+          "mode": {"product": "Fussweg", "number": "", "symbol": "", "destination": ""}
+        }
+      ],
+      "itdFare": {"fares": null}
+    }
+  ]
+}

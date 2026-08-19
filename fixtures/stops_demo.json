@@ -1,0 +1,17 @@
+[
+  {"id": "3020200", "name": "Bamberg, ZOB", "object": "ZOB", "place": "Bamberg", "quality": 1000, "best": 1},
+  {"id": "3020199", "name": "Bamberg, ZOB Gericht", "object": "ZOB Gericht", "place": "Bamberg", "quality": 962},
+  {"id": "3020444", "name": "Bamberg, ZOB/Willy-Lessing-Str.", "object": "ZOB/Willy-Lessing-Str.", "place": "Bamberg", "quality": 940},
+  {"id": "3020010", "name": "Bamberg, Bahnhof", "object": "Bahnhof", "place": "Bamberg", "quality": 1000, "best": 1},
+  {"id": "3020001", "name": "Bamberg, Bahnhof/Post", "object": "Bahnhof/Post", "place": "Bamberg", "quality": 969},
+  {"id": "3020032", "name": "Bamberg, Bahnhof/Atrium", "object": "Bahnhof/Atrium", "place": "Bamberg", "quality": 963},
+  {"id": "3020035", "name": "Bamberg, Bahnhof/Landratsamt", "object": "Bahnhof/Landratsamt", "place": "Bamberg", "quality": 952},
+  {"id": "3020005", "name": "Bamberg, Bahnhof/Ludwigstr.", "object": "Bahnhof/Ludwigstr.", "place": "Bamberg", "quality": 950},
+  {"id": "3020006", "name": "Bamberg, Bahnhof/Brennerstr.", "object": "Bahnhof/Brennerstr.", "place": "Bamberg", "quality": 949},
+  {"id": "3020178", "name": "Bamberg, Konzerthalle", "object": "Konzerthalle", "place": "Bamberg", "quality": 1000, "best": 1},
+  {"id": "3020240", "name": "Bamberg, Markusplatz", "object": "Markusplatz", "place": "Bamberg", "quality": 1000, "best": 1},
+  {"id": "3020020", "name": "Bamberg, Am Kranen", "object": "Am Kranen", "place": "Bamberg", "quality": 1000, "best": 1},
+  {"id": "3020202", "name": "Bamberg, Lange Str.", "object": "Lange Str.", "place": "Bamberg", "quality": 1000, "best": 1},
+  {"id": "3020087", "name": "Bamberg, Gaustadt Ziegelei", "object": "Gaustadt Ziegelei", "place": "Bamberg", "quality": 1000, "best": 1},
+  {"id": "3020900", "name": "Hallstadt (b Bamberg), Bahnhof", "object": "Bahnhof", "place": "Hallstadt (b Bamberg)", "quality": 460}
+]
