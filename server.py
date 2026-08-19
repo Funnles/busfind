@@ -9,7 +9,9 @@ Kein Framework, keine Bilder, nur stdlib. Ein winziges Stück JS füllt
 die Haltestellen-Vorschläge nach; ohne JS funktioniert das Formular
 weiter (HTML-Datalist + Klärungsseite).
 
-Datenquelle — offizielle EFA-Schnittstelle VGN (efa.vgn.de):
+Datenquelle — offizielle EFA-Schnittstelle VGN (efa.vgn.de)
+plus der VGN-GTFS (https://www.vgn.de/opendata/GTFS.zip, CC BY 3.0 DE)
+für die Haltestellen-Vorschläge aller Stops im Verbund:
   * XML_STOPFINDER_REQUEST — Haltestelle nach Namen
   * XML_TRIP_REQUEST2      — Verbindungen von–nach
 
@@ -26,7 +28,9 @@ import json
 import os
 import re
 import ssl
+import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -429,40 +433,134 @@ def _norm(s):
     return " ".join(re.findall(r"[a-z0-9]+", s, re.UNICODE))
 
 
-def _point_from_local(s):
+def _point_from_local(s, quality=None, best=False):
+    qv = quality if quality is not None else s.get("quality", 0)
     return {
         "usage": "sf", "type": "any", "anyType": "stop",
         "name": s["name"],
         "stateless": str(s["id"]),
-        "quality": str(s.get("quality", 0)),
-        "best": "1" if s.get("best") else "0",
+        "quality": str(qv),
+        "best": "1" if (best or s.get("best")) else "0",
         "ref": {"id": str(s["id"])},
     }
 
 
+_catalog = None
+_catalog_by_id = None
+
+
+def _demo_stops():
+    return list(_offline("stops_demo.json"))
+
+
+def load_catalog():
+    """
+    Alle VGN-Haltestellen: GTFS-Katalog (fixtures/stops_vgn.tsv),
+    ergänzt um die Demo-Liste (bekannte EFA-IDs für Bamberg).
+    """
+    global _catalog, _catalog_by_id
+    if _catalog is not None:
+        return _catalog
+    by_key = {}
+    tsv = os.path.join(HERE, "fixtures", "stops_vgn.tsv")
+    if os.path.isfile(tsv):
+        with open(tsv, encoding="utf-8") as f:
+            for line in f:
+                if not line.strip() or line.startswith("#") or line.startswith("id\t"):
+                    continue
+                sid, sep, name = line.rstrip("\n").partition("\t")
+                if not sep or not name:
+                    continue
+                by_key[_norm(name)] = {
+                    "id": sid, "name": name, "quality": 400, "best": 0,
+                }
+    for s in _demo_stops():
+        rec = {
+            "id": str(s["id"]),
+            "name": s["name"],
+            "quality": int(s.get("quality") or 0),
+            "best": 1 if s.get("best") else 0,
+        }
+        key = _norm(rec["name"])
+        prev = by_key.get(key)
+        if prev is None or rec["quality"] >= prev.get("quality", 0):
+            by_key[key] = rec
+    _catalog = sorted(by_key.values(), key=lambda s: s["name"].lower())
+    _catalog_by_id = {str(s["id"]): s for s in _catalog}
+    return _catalog
+
+
+def reset_catalog():
+    """für Tests"""
+    global _catalog, _catalog_by_id
+    _catalog = None
+    _catalog_by_id = None
+
+
+def _match_score(qtoks, ntoks):
+    """höher = besser. 0 = kein Treffer."""
+    score = 0
+    for qt in qtoks:
+        best = 0
+        for i, nt in enumerate(ntoks):
+            if nt == qt:
+                best = max(best, 120 - i)
+            elif nt.startswith(qt):
+                best = max(best, 80 - i - max(0, len(nt) - len(qt)))
+            elif qt.startswith(nt) and len(nt) >= 3:
+                best = max(best, 40 - i)
+        if best <= 0:
+            return 0
+        score += best
+    score -= len(ntoks)
+    return score
+
+
 def offline_find_stop(query):
-    """grobe stopfinder-Imitation über die lokale Haltestellenliste"""
+    """Suche über den lokalen VGN-Katalog (GTFS + Demo)."""
     qtoks = _norm(query).split()
     if not qtoks:
         return None
-    points = []
-    for s in _offline("stops_demo.json"):
+    scored = []
+    for s in load_catalog():
         ntoks = _norm(s["name"]).split()
-        if all(any(nt.startswith(qt) for nt in ntoks) for qt in qtoks):
-            points.append(_point_from_local(s))
-    points.sort(key=lambda p: -int(p.get("quality", 0)))
+        sc = _match_score(qtoks, ntoks)
+        if sc <= 0:
+            continue
+        sc += int(s.get("quality") or 0) // 50
+        scored.append((sc, s))
+    if not scored:
+        return None
+    scored.sort(key=lambda x: (-x[0], x[1]["name"]))
+    points = []
+    for sc, s in scored[:24]:
+        points.append(_point_from_local(
+            s, quality=sc, best=bool(s.get("best")) and sc >= 200))
     return points or None
 
 
 def offline_stop_name(stop_id):
-    for s in _offline("stops_demo.json"):
+    load_catalog()
+    rec = (_catalog_by_id or {}).get(str(stop_id))
+    if rec:
+        return rec["name"]
+    for s in _demo_stops():
         if str(s["id"]) == str(stop_id):
             return s["name"]
     return None
 
 
-def local_stop_names():
-    return [s["name"] for s in _offline("stops_demo.json")]
+def local_stop_names(limit=24):
+    """kurze Saat für <datalist>; die volle Liste kommt per /s."""
+    names = []
+    seen = set()
+    for s in _demo_stops():
+        if s["name"] not in seen:
+            seen.add(s["name"])
+            names.append(s["name"])
+        if len(names) >= limit:
+            break
+    return names
 
 
 # --------------------------------------------------------------------------
@@ -515,9 +613,9 @@ def search_stops(query, demo=False, limit=8):
 
 
 def suggest_stops(query, demo=False, limit=8):
-    """[{name, id}, ...] für Autovervollständigung."""
+    """[{name, id}, ...] aus dem vollen lokalen VGN-Katalog (GTFS)."""
     out = []
-    for s in search_stops(query, demo=demo, limit=limit):
+    for s in (offline_find_stop(query) or [])[:limit]:
         sid = ""
         ref = s.get("ref") or {}
         if isinstance(ref, dict):
@@ -536,6 +634,10 @@ def find_stop(query, demo=False):
         raise NotFound("")
     if query.isdigit():
         return query, offline_stop_name(query) or query
+
+    exact = [s for s in load_catalog() if _norm(s["name"]) == _norm(query)]
+    if len(exact) == 1:
+        return str(exact[0]["id"]), exact[0]["name"]
 
     stops = search_stops(query, demo=demo, limit=8)
     if not stops:
@@ -613,7 +715,16 @@ def endpoint_names(data):
     return names
 
 
-def get_trips(o_id, d_id, demo=False, when=None, lang="de"):
+def efa_stop_ref(sid, name=""):
+    """EFA mag Ziffern-IDs und IFOPT; sonst den Haltestellennamen."""
+    sid = str(sid or "").strip()
+    if sid.isdigit() or sid.startswith("de:"):
+        return sid
+    return (name or sid).strip()
+
+
+def get_trips(o_id, d_id, demo=False, when=None, lang="de",
+              o_name="", d_name=""):
     """-> (trips, Name_von, Name_nach)"""
     if demo:
         data = _offline("trip_zob_konzerthalle.json")
@@ -628,8 +739,8 @@ def get_trips(o_id, d_id, demo=False, when=None, lang="de"):
             "itdDateYear": when.strftime("%Y"),
             "itdTimeHour": when.strftime("%H"),
             "itdTimeMinute": when.strftime("%M"),
-            "type_origin": "stop", "name_origin": o_id,
-            "type_destination": "stop", "name_destination": d_id,
+            "type_origin": "stop", "name_origin": efa_stop_ref(o_id, o_name),
+            "type_destination": "stop", "name_destination": efa_stop_ref(d_id, d_name),
         })
     o_name, d_name = endpoint_names(data)
     return parse_trips(data, lang), o_name, d_name

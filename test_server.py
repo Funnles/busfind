@@ -2,17 +2,24 @@
 # -*- coding: utf-8 -*-
 """Unit- und HTTP-Tests für busfind (ohne Netz, Offline-Fixtures)."""
 
+import io
 import json
 import os
+import sys
+import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from datetime import datetime
 from http.server import ThreadingHTTPServer
 
 import server
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
+import import_gtfs  # noqa: E402
 
 
 class I18nTests(unittest.TestCase):
@@ -108,6 +115,82 @@ class StopSuggestTests(unittest.TestCase):
     def test_unknown_stop(self):
         with self.assertRaises(server.NotFound):
             server.find_stop("Atlantis Hafen", demo=True)
+
+    def test_gtfs_catalog_not_just_zob(self):
+        hits = server.suggest_stops("Klinikum", demo=True)
+        names = [s["name"] for s in hits]
+        self.assertTrue(any("Klinikum" in n for n in names), names)
+        hits = server.suggest_stops("Schönleins", demo=True)
+        names = [s["name"] for s in hits]
+        self.assertTrue(any("Schönleins" in n for n in names), names)
+
+    def test_full_vgn_catalog_loaded(self):
+        server.reset_catalog()
+        cat = server.load_catalog()
+        self.assertGreater(len(cat), 1000, "GTFS/ZHV-Katalog fehlt")
+        names = [s["name"] for s in server.suggest_stops("Plärrer", demo=True)]
+        self.assertTrue(any("Plärrer" in n for n in names), names)
+        names = [s["name"] for s in server.suggest_stops("Gaustadt", demo=True)]
+        self.assertTrue(any("Gaustadt" in n for n in names), names)
+
+    def test_full_catalog_tsv(self):
+        here_tsv = os.path.join(os.path.dirname(server.__file__),
+                                "fixtures", "stops_vgn.tsv")
+        prev = None
+        if os.path.exists(here_tsv):
+            prev = here_tsv + ".baktest"
+            os.replace(here_tsv, prev)
+        try:
+            with open(here_tsv, "w", encoding="utf-8") as f:
+                f.write("id\tname\n")
+                f.write("de:09461:20999\tBamberg, Gartenstadt\n")
+                f.write("de:09564:510\tNürnberg, Plärrer\n")
+                f.write("de:09563:1\tFürth, Rathaus\n")
+            server.reset_catalog()
+            hits = server.suggest_stops("Plärrer", demo=True)
+            names = [s["name"] for s in hits]
+            self.assertTrue(any("Plärrer" in n for n in names), names)
+            hits = server.suggest_stops("Gartenstadt", demo=True)
+            names = [s["name"] for s in hits]
+            self.assertTrue(any("Gartenstadt" in n for n in names), names)
+            hits = server.suggest_stops("Rathaus", demo=True)
+            names = [s["name"] for s in hits]
+            self.assertTrue(any("Fürth" in n for n in names), names)
+        finally:
+            if os.path.exists(here_tsv):
+                os.remove(here_tsv)
+            if prev and os.path.exists(prev):
+                os.replace(prev, here_tsv)
+            server.reset_catalog()
+
+
+class GtfsImportTests(unittest.TestCase):
+    def _zip_with_stops(self, body):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("stops.txt", body)
+        fd, path = tempfile.mkstemp(suffix=".zip")
+        os.close(fd)
+        with open(path, "wb") as f:
+            f.write(buf.getvalue())
+        return path
+
+    def test_parse_dedupes_platforms(self):
+        path = self._zip_with_stops(
+            "stop_id,stop_name,location_type,parent_station\n"
+            "de:09461:20200,Bamberg ZOB,1,\n"
+            "de:09461:20200:1,Bamberg ZOB,0,de:09461:20200\n"
+            "de:09461:20240,Bamberg Markusplatz,0,\n"
+            "de:09564:x,Nürnberg Eingang,2,\n"
+        )
+        try:
+            stops = import_gtfs.stops_from_zip(path)
+            names = [s["name"] for s in stops]
+            self.assertEqual(names.count("Bamberg ZOB"), 1)
+            self.assertIn("Bamberg Markusplatz", names)
+            self.assertFalse(any("Eingang" in n for n in names))
+        finally:
+            os.remove(path)
 
 
 class PageTests(unittest.TestCase):

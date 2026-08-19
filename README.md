@@ -23,9 +23,11 @@ python3 server.py
 ```
 
 Öffne `http://localhost:8000/`. Felder «Von» / «Nach», **Datum und Uhrzeit
-der Abfahrt**, eine Taste. Beim Tippen erscheinen Vorschläge
-(`ZOB` → Bamberg ZOB, Forchheim ZOB, Erlangen ZOB …). Ohne JavaScript
-greift die HTML-Datalist, und bei mehrdeutigen Namen kommt eine Klärungsseite.
+der Abfahrt**, eine Taste. Beim Tippen erscheinen Vorschläge für **alle VGN-Haltestellen**
+(nicht nur ZOB/Bahnhof): `ZOB`, `Klinikum`, `Markusplatz`, `Gaustadt` …
+Die Liste kommt aus dem offiziellen
+[VGN-GTFS](https://www.vgn.de/opendata/GTFS.zip). Ohne JavaScript greift
+eine kurze HTML-Datalist, und bei mehrdeutigen Namen eine Klärungsseite.
 
 Direkter Link:
 `http://localhost:8000/r?f=ZOB&t=Bahnhof&d=2026-08-19&tm=17:30&lang=de`
@@ -35,10 +37,18 @@ Sprache umschalten: Links oben auf jeder Seite, oder `?lang=en|uk|ru`.
 
 ## Technik
 
-Daten kommen von der offiziellen EFA-Schnittstelle VGN (`efa.vgn.de`):
+Verbindungen kommen von der offiziellen EFA-Schnittstelle VGN (`efa.vgn.de`):
 
 * `XML_STOPFINDER_REQUEST` — Haltestelle nach Namen
 * `XML_TRIP_REQUEST2` — Verbindungen «von → nach» zur gewählten Abfahrtszeit
+
+Die Vorschläge nutzen den [VGN-Soll-GTFS](https://www.vgn.de/opendata/GTFS.zip)
+(CC BY 3.0 DE, VGN – Verkehrsverbund Großraum Nürnberg GmbH). Katalog bauen:
+
+```
+python3 scripts/import_gtfs.py              # lädt GTFS.zip und schreibt fixtures/stops_vgn.tsv
+python3 scripts/import_gtfs.py GTFS.zip     # aus schon heruntergeladener Datei
+```
 
 EFA liefert Dutzende Kilobyte JSON. busfind zieht Zeiten, Steige, Linien,
 Umstiege, Ticketpreis und Echtzeit-Verspätung raus und rendert minimales HTML.
@@ -64,9 +74,11 @@ Inspiriert von:
 ## Offline-Demo
 
 In `fixtures/` liegt ein EFA-Schnappschuss vom 19.08.2026
-(Verbindung ZOB → Konzerthalle, Bus 906) plus eine erweiterte
-Haltestellenliste für die Vorschläge. Ist `efa.vgn.de` nicht erreichbar,
-zeigt busfind automatisch die Demo.
+(Verbindung ZOB → Konzerthalle, Bus 906), eine kurze Demo-Liste und
+`stops_vgn.tsv` — ca. 16 000 Fahrgast-Halte im VGN-Gebiet
+(aus dem VGN-GTFS bzw. ZHV, gefiltert). Ist `efa.vgn.de`
+nicht erreichbar, zeigt busfind automatisch die Demo; die Vorschläge
+bleiben vollständig.
 
 ```
 python3 test_server.py
