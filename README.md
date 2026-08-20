@@ -78,7 +78,9 @@ python3 scripts/import_gtfs.py GTFS.zip     # aus schon heruntergeladener Datei
 
 EFA liefert Dutzende Kilobyte JSON. busfind zieht Zeiten, Steige, Linien,
 Umstiege, Ticketpreis und Echtzeit-Verspätung raus und rendert minimales HTML.
-Keine Abhängigkeiten, reines Python-stdlib.
+Aktuelle Datum-/Zeitwerte werden immer in **Europe/Berlin** ermittelt — auch
+wenn der Host oder Container in UTC läuft. Keine Python-Abhängigkeiten, reines
+Python-stdlib.
 
 Ein paar hundert Byte JS füllen die Vorschläge nach (`GET /s?q=ZOB` → JSON).
 Ohne JS bleibt alles benutzbar.
@@ -96,6 +98,15 @@ Inspiriert von:
 | `EFA_URL`         | `https://efa.vgn.de/xml/` | EFA-Adresse (oder Spiegel)            |
 | `BUSFIND_TIMEOUT` | `12`                      | Timeout der EFA-Anfragen, Sekunden    |
 | `BUSFIND_OFFLINE` | aus                       | `1` — Demo mit lokalem Snapshot       |
+
+## Logs
+
+Start, HTTP-Zugriffe und Fehler werden mit Zeitstempel und Log-Level nach
+`stderr` geschrieben (bei Docker sichtbar mit `docker compose logs`). Ist EFA
+nicht erreichbar, nennt der `ERROR`-Eintrag die betroffene Operation und die
+kurze Ursache; der Wechsel zum lokalen Snapshot erscheint als `WARNING`.
+Auch ein belegter Server-Port wird verständlich protokolliert statt nur einen
+Traceback auszugeben.
 
 ## Offline-Demo
 
