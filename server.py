@@ -37,6 +37,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from zoneinfo import ZoneInfo
 
 # --------------------------------------------------------------------------
 # Konfig
@@ -48,6 +49,9 @@ OFFLINE = os.environ.get("BUSFIND_OFFLINE", "") not in ("", "0")
 TIMEOUT = float(os.environ.get("BUSFIND_TIMEOUT", "12"))
 UA = "busfind/0.2 (dial-up friendly)"
 HERE = os.path.dirname(os.path.abspath(__file__))
+# EFA serves VGN in German local time. Containers often run in UTC, which
+# otherwise selects the wrong service day around midnight.
+VGN_TIMEZONE = ZoneInfo("Europe/Berlin")
 
 LANGS = ("de", "en", "uk", "ru")
 DEFAULT_LANG = "de"
@@ -261,6 +265,20 @@ def product_name(product, lang):
 # kleine Helfer
 # --------------------------------------------------------------------------
 
+def log_event(level, message, *args):
+    """Kompaktes, timestamped Log nach stderr (auch in Docker sichtbar)."""
+    if args:
+        message = message % args
+    timestamp = datetime.now(VGN_TIMEZONE).isoformat(timespec="seconds")
+    sys.stderr.write("%s %-7s %s\n" % (timestamp, level.upper(), message))
+    sys.stderr.flush()
+
+
+def current_vgn_time():
+    """Aktuelle VGN-Wandzeit als naive datetime für EFA und HTML-Felder."""
+    return datetime.now(VGN_TIMEZONE).replace(tzinfo=None)
+
+
 def as_list(x):
     """EFA klappt einelementige Listen gern zu einem Objekt zusammen."""
     if x is None:
@@ -348,7 +366,7 @@ def when_fmt(when, lang):
 
 def parse_when(d, tm, now=None):
     """HTML-date/time oder Freitext -> datetime. Leer/ungültig = now."""
-    now = now or datetime.now()
+    now = now or current_vgn_time()
     date_ok = None
     time_ok = None
     d = (d or "").strip()
@@ -403,22 +421,54 @@ class EfaBad(Exception):
 
 
 _efa_skip_until = 0.0
+_efa_skip_reason = ""
+
+
+def _error_summary(error):
+    """Kurze Fehlerursache ohne vollständige URL oder Verbindungsparameter."""
+    reason = getattr(error, "reason", error)
+    text = str(reason).strip() or "unknown error"
+    return "%s: %s" % (type(reason).__name__, text)
+
+
+def _mark_efa_down(reason):
+    global _efa_skip_until, _efa_skip_reason
+    _efa_skip_until = time.time() + 45
+    _efa_skip_reason = reason
 
 
 def efa_get(endpoint, params, timeout=None):
-    global _efa_skip_until
     if time.time() < _efa_skip_until:
-        raise EfaDown()
+        raise EfaDown(_efa_skip_reason or "temporarily unavailable")
     url = "%s/%s?%s" % (EFA_URL, endpoint, urllib.parse.urlencode(params))
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
         with urllib.request.urlopen(req, timeout=timeout or TIMEOUT) as r:
-            return json.loads(r.read().decode("utf-8", "replace"))
+            raw = r.read().decode("utf-8", "replace")
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError) as e:
+            reason = "invalid JSON (%s)" % _error_summary(e)
+            log_event("ERROR", "EFA %s returned %s", endpoint, reason)
+            raise EfaBad(reason) from None
+        if not isinstance(data, dict):
+            reason = "invalid JSON (expected an object)"
+            log_event("ERROR", "EFA %s returned %s", endpoint, reason)
+            raise EfaBad(reason)
+        return data
     except urllib.error.HTTPError as e:
-        raise EfaBad("HTTP %d" % e.code) from None
-    except (urllib.error.URLError, ssl.SSLError, OSError, ValueError):
-        _efa_skip_until = time.time() + 45
-        raise EfaDown() from None
+        reason = "HTTP %d" % e.code
+        if 500 <= e.code <= 599:
+            _mark_efa_down(reason)
+            log_event("ERROR", "EFA unavailable (%s): %s", endpoint, reason)
+            raise EfaDown(reason) from None
+        log_event("ERROR", "EFA %s failed: %s", endpoint, reason)
+        raise EfaBad(reason) from None
+    except (urllib.error.URLError, ssl.SSLError, OSError) as e:
+        reason = _error_summary(e)
+        _mark_efa_down(reason)
+        log_event("ERROR", "EFA unavailable (%s): %s", endpoint, reason)
+        raise EfaDown(reason) from None
 
 
 _offline_cache = {}
@@ -806,12 +856,13 @@ def get_trips(o_id, d_id, demo=False, when=None, lang="de",
     if demo:
         data = _offline("trip_zob_konzerthalle.json")
     else:
-        when = when or datetime.now()
+        when = when or current_vgn_time()
         data = efa_get("XML_TRIP_REQUEST2", {
             "outputFormat": "JSON", "language": "de", "stateless": 1,
             "calcNumberOfTrips": 3, "routeType": "LEASTTIME",
             "itdTripDateTimeDepArr": "dep",
-            "itdDateDayOfMonth": when.strftime("%d"),
+            # EFA calls this field itdDateDay, not itdDateDayOfMonth.
+            "itdDateDay": when.strftime("%d"),
             "itdDateMonth": when.strftime("%m"),
             "itdDateYear": when.strftime("%Y"),
             "itdTimeHour": when.strftime("%H"),
@@ -892,7 +943,7 @@ def keep_params(f="", t="", d="", tm=""):
 
 
 def page_index(f="", t="", d="", tm="", lang="de", msg=""):
-    now = datetime.now()
+    now = current_vgn_time()
     d = d or now.strftime("%Y-%m-%d")
     tm = tm or now.strftime("%H:%M")
     parts = [
@@ -1057,7 +1108,7 @@ def build_route(f, t, demo, lang="de", when=None, d="", tm=""):
     -> fertiges HTML. demo=True arbeitet auf dem lokalen Snapshot.
     Wirft EfaDown/EfaBad, wenn die Live-Anfrage scheitert.
     """
-    when = when or datetime.now()
+    when = when or current_vgn_time()
     fr = find_stop(f, demo)
     if fr[0] is None:
         return page_choices(tr(lang, "which_from"), f, fr[1],
@@ -1088,7 +1139,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "busfind/0.2"
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
+        log_event("INFO", "%s %s", self.address_string(), fmt % args)
 
     def _send(self, body, code=200, content_type="text/html; charset=utf-8",
               extra_headers=None):
@@ -1159,13 +1210,15 @@ class Handler(BaseHTTPRequestHandler):
                 tr(lang, "not_in_vgn", h(e.query)),
                 tr(lang, "not_in_vgn_hint"), f, t, d, tm, lang),
                 extra_headers=lang_headers)
-        except EfaDown:
+        except EfaDown as e:
+            log_event("WARNING", "EFA unavailable; using offline snapshot (%s)",
+                      str(e) or "unknown reason")
             try:
                 self._send(build_route(f, t, True, lang, when, d, tm),
                            extra_headers=lang_headers)
-            except NotFound as e:
+            except NotFound as fallback_error:
                 self._send(page_error(
-                    tr(lang, "not_in_vgn", h(e.query)),
+                    tr(lang, "not_in_vgn", h(fallback_error.query)),
                     tr(lang, "not_in_vgn_hint"), f, t, d, tm, lang),
                     extra_headers=lang_headers)
         except EfaBad as e:
@@ -1176,15 +1229,26 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print("busfind: http://0.0.0.0:%d/  (Modus: %s, Sprache: %s)" % (
-        PORT, "Offline-Demo" if OFFLINE else "live efa.vgn.de", DEFAULT_LANG),
-        flush=True)
+    try:
+        srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    except OSError as e:
+        log_event("ERROR", "HTTP server could not bind to 0.0.0.0:%d: %s",
+                  PORT, _error_summary(e))
+        return 1
+
+    log_event(
+        "INFO", "busfind: http://0.0.0.0:%d/ (mode: %s; language: %s; "
+        "VGN time: %s Europe/Berlin)",
+        PORT, "offline demo" if OFFLINE else "live efa.vgn.de", DEFAULT_LANG,
+        current_vgn_time().strftime("%d.%m.%Y %H:%M"))
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        pass
+        log_event("INFO", "busfind stopped")
+    finally:
+        srv.server_close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

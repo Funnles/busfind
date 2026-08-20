@@ -13,8 +13,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from contextlib import redirect_stderr
 from datetime import datetime
 from http.server import ThreadingHTTPServer
+from unittest import mock
 
 import server
 
@@ -318,6 +320,124 @@ class CssAndLayoutTests(unittest.TestCase):
     def test_responsive_css_media_query(self):
         self.assertIn("@media(max-width:600px)", server.CSS)
         self.assertIn("flex-direction:column", server.CSS)
+
+
+class _Response:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return self.body
+
+
+class CurrentVgnTimeTests(unittest.TestCase):
+    def test_current_time_uses_berlin_wall_clock(self):
+        expected = datetime.now(server.VGN_TIMEZONE).replace(tzinfo=None)
+        actual = server.current_vgn_time()
+        self.assertIsNone(actual.tzinfo)
+        self.assertLess(abs((actual - expected).total_seconds()), 2)
+
+    def test_trip_request_sends_current_vgn_date_and_time(self):
+        current = datetime(2026, 8, 20, 7, 4)
+        captured = {}
+
+        def fake_efa_get(endpoint, params, timeout=None):
+            captured["endpoint"] = endpoint
+            captured["params"] = params
+            return {"trips": []}
+
+        with mock.patch.object(server, "current_vgn_time", return_value=current), \
+             mock.patch.object(server, "efa_get", side_effect=fake_efa_get):
+            trips, _, _ = server.get_trips("3020200", "3020178")
+
+        self.assertEqual(trips, [])
+        self.assertEqual(captured["endpoint"], "XML_TRIP_REQUEST2")
+        params = captured["params"]
+        self.assertEqual(params["itdTripDateTimeDepArr"], "dep")
+        self.assertEqual(params["itdDateDay"], "20")
+        self.assertEqual(params["itdDateMonth"], "08")
+        self.assertEqual(params["itdDateYear"], "2026")
+        self.assertEqual(params["itdTimeHour"], "07")
+        self.assertEqual(params["itdTimeMinute"], "04")
+        self.assertNotIn("itdDateDayOfMonth", params)
+
+    def test_index_defaults_to_current_vgn_time(self):
+        current = datetime(2026, 8, 20, 7, 4)
+        with mock.patch.object(server, "current_vgn_time", return_value=current):
+            html = server.page_index()
+        self.assertIn('type=date name=d value="2026-08-20"', html)
+        self.assertIn('type=time name=tm value="07:04"', html)
+
+
+class EfaLoggingTests(unittest.TestCase):
+    def setUp(self):
+        server._efa_skip_until = 0.0
+        server._efa_skip_reason = ""
+
+    def tearDown(self):
+        server._efa_skip_until = 0.0
+        server._efa_skip_reason = ""
+
+    def test_network_failure_is_logged_with_reason(self):
+        error = urllib.error.URLError(ConnectionRefusedError("connection refused"))
+        stderr = io.StringIO()
+        with mock.patch.object(server.urllib.request, "urlopen", side_effect=error), \
+             redirect_stderr(stderr):
+            with self.assertRaises(server.EfaDown) as caught:
+                server.efa_get("XML_STOPFINDER_REQUEST", {"name_sf": "ZOB"})
+
+        self.assertIn("connection refused", str(caught.exception))
+        output = stderr.getvalue()
+        self.assertIn("ERROR", output)
+        self.assertIn("EFA unavailable", output)
+        self.assertIn("XML_STOPFINDER_REQUEST", output)
+        self.assertIn("connection refused", output)
+        self.assertNotIn("name_sf", output)
+
+    def test_http_503_is_treated_as_unavailable_and_logged(self):
+        error = urllib.error.HTTPError(
+            "https://efa.invalid/", 503, "Service Unavailable", {}, None)
+        stderr = io.StringIO()
+        with mock.patch.object(server.urllib.request, "urlopen", side_effect=error), \
+             redirect_stderr(stderr):
+            with self.assertRaises(server.EfaDown) as caught:
+                server.efa_get("XML_TRIP_REQUEST2", {})
+
+        self.assertEqual(str(caught.exception), "HTTP 503")
+        self.assertIn("HTTP 503", stderr.getvalue())
+
+    def test_invalid_json_is_bad_response_not_network_outage(self):
+        stderr = io.StringIO()
+        with mock.patch.object(server.urllib.request, "urlopen",
+                               return_value=_Response(b"not json")), \
+             redirect_stderr(stderr):
+            with self.assertRaises(server.EfaBad) as caught:
+                server.efa_get("XML_TRIP_REQUEST2", {})
+
+        self.assertIn("JSON", str(caught.exception))
+        self.assertIn("invalid JSON", stderr.getvalue())
+        self.assertEqual(server._efa_skip_until, 0.0)
+
+
+class ServerStartupTests(unittest.TestCase):
+    def test_bind_failure_has_clear_log_and_nonzero_result(self):
+        stderr = io.StringIO()
+        with mock.patch.object(server, "ThreadingHTTPServer",
+                               side_effect=OSError(98, "Address already in use")), \
+             redirect_stderr(stderr):
+            result = server.main()
+
+        self.assertEqual(result, 1)
+        output = stderr.getvalue()
+        self.assertIn("ERROR", output)
+        self.assertIn("HTTP server could not bind", output)
+        self.assertIn("Address already in use", output)
 
 
 class HttpTests(unittest.TestCase):

@@ -4,7 +4,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     BUSFIND_PORT=8000
 
-RUN useradd --system --uid 10001 --home /app --shell /usr/sbin/nologin busfind
+# zoneinfo reads the system database to calculate Europe/Berlin including DST.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --home /app --shell /usr/sbin/nologin busfind
 
 WORKDIR /app
 
